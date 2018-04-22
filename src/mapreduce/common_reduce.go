@@ -1,10 +1,9 @@
 package mapreduce
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 )
 
@@ -53,33 +52,37 @@ func doReduce(
 	// Your code here (Part I).
 	//
 
-	fname := mergeName(jobName, reduceTask)
-	out, err := os.Create(fname)
-	if err != nil {
-		log.Fatalf("Fialed to create file %s: %v", fname, err)
-		return
-	}
-
+	kvv := make(map[string][]string)
 	for i := 0; i < nMap; i++ {
 		name := reduceName(jobName, i, reduceTask)
 		buff, err := ioutil.ReadFile(name)
 		if err != nil {
-			log.Fatalf("Fialed to read file %s: %v", name, err)
-			return
+			panic(err)
 		}
-		var keys []KeyValue
-		err = json.Unmarshal(buff, &keys)
-		if err != nil {
-			log.Fatalf("Fialed to unmarshal value: %v", err)
-			return
-		}
+		dec := json.NewDecoder(bytes.NewReader(buff))
 
-		for _, v := range keys {
-			row := fmt.Sprintf(`{"Key": "%v", "Value": "%v"}`, v.Key, v.Value)
-			if _, err = out.WriteString(row); err != nil {
-				log.Fatalf("Failed to call WriteString:  %v", err)
-				return
+		for dec.More() {
+			var kv KeyValue
+			err := dec.Decode(&kv)
+			if err != nil {
+				panic(err)
 			}
+			kvv[kv.Key] = append(kvv[kv.Key], kv.Value)
 		}
 	}
+	fname := mergeName(jobName, reduceTask)
+	out, err := os.Create(fname)
+	defer out.Close()
+	if err != nil {
+		panic(err)
+	}
+	enc := json.NewEncoder(out)
+	for k, v := range kvv {
+		reduceReuslt := reduceF(k, v)
+		enc.Encode(KeyValue{
+			Key:   k,
+			Value: reduceReuslt,
+		})
+	}
+
 }
