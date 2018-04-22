@@ -1,5 +1,13 @@
 package mapreduce
 
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+)
+
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -44,4 +52,34 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
+
+	fname := mergeName(jobName, reduceTask)
+	out, err := os.Create(fname)
+	if err != nil {
+		log.Fatalf("Fialed to create file %s: %v", fname, err)
+		return
+	}
+
+	for i := 0; i < nMap; i++ {
+		name := reduceName(jobName, i, reduceTask)
+		buff, err := ioutil.ReadFile(name)
+		if err != nil {
+			log.Fatalf("Fialed to read file %s: %v", name, err)
+			return
+		}
+		var keys []KeyValue
+		err = json.Unmarshal(buff, &keys)
+		if err != nil {
+			log.Fatalf("Fialed to unmarshal value: %v", err)
+			return
+		}
+
+		for _, v := range keys {
+			row := fmt.Sprintf(`{"Key": "%v", "Value": "%v"}`, v.Key, v.Value)
+			if _, err = out.WriteString(row); err != nil {
+				log.Fatalf("Failed to call WriteString:  %v", err)
+				return
+			}
+		}
+	}
 }
