@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 )
 
 func doMap(
@@ -59,17 +58,13 @@ func doMap(
 	// Your code here (Part I).
 	//
 
+	buff, err := ioutil.ReadFile(inFile)
+	if err != nil {
+		log.Fatalf("Failed to read field '%v': %v", inFile, err)
+		return
+	}
+	var encs []*json.Encoder
 	for i := 0; i < nReduce; i++ {
-		buff, err := ioutil.ReadFile(inFile)
-		if err != nil {
-			log.Fatalf("Failed to read field '%v': %v", inFile, err)
-			return
-		}
-		keys := mapF(inFile, string(buff))
-		for i := 0; i < len(keys); i++ {
-			keys[i].Value = strconv.Itoa(ihash(keys[i].Key))
-		}
-
 		name := reduceName(jobName, mapTask, i)
 		outFile, err := os.Create(name)
 		defer outFile.Close()
@@ -77,11 +72,13 @@ func doMap(
 			log.Fatalf("Failed to create file %v: %v", name, err)
 			return
 		}
-		enc := json.NewEncoder(outFile)
-		err = enc.Encode(&keys)
+		encs = append(encs, json.NewEncoder(outFile))
+	}
+
+	for _, kv := range mapF("", string(buff)) {
+		err = encs[ihash(kv.Key)%nReduce].Encode(kv)
 		if err != nil {
-			log.Fatalf("Failed to encode:  %v", err)
-			return
+			log.Fatal("Failed to encode value:", err)
 		}
 	}
 }
